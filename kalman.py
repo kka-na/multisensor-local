@@ -1,51 +1,56 @@
-# 칼만 필터 클래스 정의
 import numpy as np
 
 class KalmanFilter:
-    def __init__(self, state_dim, meas_dim):
-        self.state_dim = state_dim
-        self.meas_dim = meas_dim
+    def __init__(self):
+        self.state = np.zeros(9)  # [x, y, z, vx, vy, vz, ax, ay, az]
+        self.covariance = np.eye(9) * 0.1
+        self.process_noise = np.eye(9) * 0.1
+        self.measurement_noise = np.eye(3) * 0.5  # Measurement noise for position only
+        self.measurement_matrix = np.zeros((3, 9))  # Measurement matrix for position only
+        self.measurement_matrix[0, 0] = 1
+        self.measurement_matrix[1, 1] = 1
+        self.measurement_matrix[2, 2] = 1
+        
+    def predict(self, dt):
+        # State transition matrix considering constant acceleration model
+        F = np.eye(9)
+        F[0, 3] = dt
+        F[1, 4] = dt
+        F[2, 5] = dt
+        F[3, 6] = dt
+        F[4, 7] = dt
+        F[5, 8] = dt
+        
+        # Control matrix (for acceleration input)
+        B = np.zeros((9, 3))
+        B[3, 0] = dt
+        B[4, 1] = dt
+        B[5, 2] = dt
+        
+        # Predicted state
+        self.state = np.dot(F, self.state)
+        
+        # Predicted covariance
+        self.covariance = np.dot(F, np.dot(self.covariance, F.T)) + self.process_noise
+        
+    def update(self, measurement):
+        # Measurement residual
+        y = measurement - np.dot(self.measurement_matrix, self.state)
+        
+        # Residual covariance
+        S = np.dot(self.measurement_matrix, np.dot(self.covariance, self.measurement_matrix.T)) + self.measurement_noise
+        
+        # Kalman gain
+        K = np.dot(self.covariance, np.dot(self.measurement_matrix.T, np.linalg.inv(S)))
+        
+        # Update state
+        self.state += np.dot(K, y)
+        
+        # Update covariance
+        self.covariance = np.dot(np.eye(9) - np.dot(K, self.measurement_matrix), self.covariance)
 
-        # 상태 추정치 초기화
-        self.x = np.zeros((state_dim, 1))
         
-        # 상태 추정 오차 공분산 행렬 초기화
-        self.P = np.eye(state_dim)
-        
-        # 상태 전이 행렬 (State transition matrix)
-        self.F = np.eye(state_dim)
-        
-        # 측정 행렬 (Measurement matrix)
-        self.H = np.zeros((meas_dim, state_dim))
-        
-        # 측정 노이즈 공분산 행렬 (Measurement noise covariance)
-        self.R = np.eye(meas_dim)
-        
-        # 프로세스 노이즈 공분산 행렬 (Process noise covariance)
-        self.Q = np.eye(state_dim)
-
-    def predict(self):
-        # 상태 예측
-        self.x = np.dot(self.F, self.x)
-        
-        # 오차 공분산 예측
-        self.P = np.dot(self.F, np.dot(self.P, self.F.T)) + self.Q
-
-    def update(self, z):
-        # 측정 잔차
-        y = z - np.dot(self.H, self.x)
-        
-        # 잔차 공분산
-        S = np.dot(self.H, np.dot(self.P, self.H.T)) + self.R
-        
-        # 칼만 이득
-        K = np.dot(self.P, np.dot(self.H.T, np.linalg.inv(S)))
-        
-        # 상태 업데이트
-        self.x = self.x + np.dot(K, y)
-        
-        # 오차 공분산 업데이트
-        self.P = self.P - np.dot(K, np.dot(self.H, self.P))
-
-    def get_state(self):
-        return self.x
+    def integrate_imu(self, accel, dt):
+        # Integrate acceleration to get velocity and then position
+        self.state[3:6] += accel * dt  # Update velocity (vx, vy, vz)
+        self.state[0:3] += self.state[3:6] * dt  # Update position (x, y, z)

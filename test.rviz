@@ -34,13 +34,13 @@ Visualization Manager:
   Class: ""
   Displays:
     - Class: rviz/Marker
-      Enabled: true
+      Enabled: false
       Marker Topic: /leica/marker
       Name: Marker
       Namespaces:
-        leica_gt: true
+        {}
       Queue Size: 100
-      Value: true
+      Value: false
     - Class: rviz/Image
       Enabled: true
       Image Topic: /left/image_raw
@@ -82,13 +82,13 @@ Visualization Manager:
       Use rainbow: true
       Value: true
     - Class: rviz/Marker
-      Enabled: true
+      Enabled: false
       Marker Topic: /node_pos/large
       Name: Marker
       Namespaces:
         {}
       Queue Size: 100
-      Value: true
+      Value: false
     - Class: rviz/Marker
       Enabled: true
       Marker Topic: /uwb_marker
@@ -121,7 +121,7 @@ Visualization Manager:
       Length: 1
       Name: Axes
       Radius: 0.10000000149011612
-      Reference Frame: gt
+      Reference Frame: local
       Show Trail: false
       Value: true
     - Alpha: 1
@@ -192,7 +192,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/ThirdPersonFollower
-      Distance: 17.623416900634766
+      Distance: 35.347896575927734
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -208,9 +208,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.3753983676433563
-      Target Frame: gt
-      Yaw: 0.1603986620903015
+      Pitch: 0.5647973418235779
+      Target Frame: local
+      Yaw: 0.7585281133651733
     Saved: ~
 Window Geometry:
   Displays:
@@ -230,5 +230,5 @@ Window Geometry:
   Views:
     collapsed: true
   Width: 1079
-  X: 1
-  Y: 17
+  X: 0
+  Y: 877

@@ -1,7 +1,7 @@
 import rospy
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-        
+
 from sensor_msgs.msg import PointCloud2, Imu
 import sensor_msgs.point_cloud2 as pc2
 from std_msgs.msg import ColorRGBA
@@ -9,17 +9,14 @@ from uwb_driver.msg import UwbRange
 from geometry_msgs.msg import Quaternion, TransformStamped, Point, PoseStamped, Vector3
 from nav_msgs.msg import Odometry
 from visualization_msgs.msg import Marker
-import tf.transformations as tf_trans
 import math
 import tf2_ros
 
-from kalman import KalmanFilter
+from ukf import UnscentedKalmanFilter
 
 class UWBLocalization:
     def __init__(self):
         rospy.init_node('uwb_localization', anonymous=True)
-        
-        self.kalman_filter = KalmanFilter()
 
         self.tf_broadcaster = tf2_ros.TransformBroadcaster()
         self.tf_buffer = tf2_ros.Buffer()
@@ -31,15 +28,20 @@ class UWBLocalization:
         self.uwb201b = {'1': None, '2': None, '3': None}
         self.attribute_mapping = {(200, 0): 'uwb200a',(200, 1): 'uwb200b',(201, 0): 'uwb201a',(201, 1): 'uwb201b'}
         self.responder_mapping = {100: '1',101: '2',102: '3'}
+
         self.uwb_cnt = 0
         self.leica_cnt = 0
-        self.avg_position = [0,0,0]
+        self.avg_position = None
         self.orientation = Quaternion()
         self.stamp = rospy.Time.now()
         self.initial_pos = None
         self.initializing = True
         self.init_duration = rospy.Duration(5)  # 안정화 시간 5초
         self.init_start_time = rospy.Time.now()
+
+        process_noise = np.eye(6) * 0.01  # 과정 노이즈 공분산 행렬
+        measurement_noise = np.eye(3) * 0.5  # 측정 노이즈 공분산 행렬
+        self.ukf = UnscentedKalmanFilter(0.01, process_noise, measurement_noise)
 
         rospy.Subscriber("/uwb_endorange_info", UwbRange, self.callback_uwb)
         rospy.Subscriber("/leica/pose/relative", PoseStamped, self.leica_cb)
@@ -53,27 +55,33 @@ class UWBLocalization:
         self.transform_points2_pub = rospy.Publisher('/os1_cloud_node2/transformed_points', PointCloud2, queue_size=1)
         self.large_node_marker_pub = rospy.Publisher('/node_pos/large', Marker, queue_size=10)
         self.uwb_odom_pub = rospy.Publisher('/uwb_odom',Odometry, queue_size=1)
-        
-    
+
     def imu_cb(self, msg):
         self.orientation = Quaternion(msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w)
-        # Extract acceleration data from IMU message
+        if self.avg_position is None:
+            return
         accel = np.array([msg.linear_acceleration.x, msg.linear_acceleration.y, msg.linear_acceleration.z])
-        
-        # Time difference for prediction step
+
         current_time = msg.header.stamp
         dt = (current_time - self.stamp).to_sec()
-        self.stamp = current_time
-        if dt > 0.5:
-            return
+        if dt >= 0.01:
+            self.stamp = current_time
 
-        #dt = 0.05
-        if self.initializing:
-            return
-        
-        # Kalman Filter prediction step with IMU acceleration data
-        self.kalman_filter.integrate_imu(accel, dt)
-        self.kalman_filter.predict(dt)
+            # self.kalman_filter.integrate_imu(accel, dt)
+            # self.kalman_filter.predict(dt)
+
+            self.ukf.predict(accel)
+            self.ukf.update(np.array(self.avg_position), accel)
+            ukf_position = self.ukf.get_state()
+            
+            if self.initial_pos is None:
+                self.initial_pos = ukf_position[:3]
+            self.transform_to_local_frame(ukf_position[:3])
+
+            #self.publish_uwb(Point(*ukf_position[:3]), self.orientation)
+
+        # self.avg_position = self.kalman_filter.state[:3]
+        # self.publish_uwb(Point(*self.avg_position), self.orientation)
 
     def calc_world_position(self):
         if self.has_none_value():
@@ -83,22 +91,17 @@ class UWBLocalization:
         pos3 = self.trilaterate(self.uwb201a)
         pos4 = self.trilaterate(self.uwb201b)
         positions = [pos1, pos2, pos3, pos4]
-        self.avg_position = self.calculate_average_position(positions)
-        self.avg_position = [-self.avg_position[1], -self.avg_position[0], self.avg_position[2]]
-        
-        if self.initial_pos is None:
-            self.initial_pos = np.array([self.avg_position[0],self.avg_position[1],self.avg_position[2]+3] )
-        
-        if self.initializing:
-            if rospy.Time.now() - self.init_start_time > self.init_duration:
-                self.initializing = False
-            return
-        
-        
+        avg_position = self.calculate_average_position(positions)
+        if avg_position is not None:
+            self.avg_position = [-avg_position[1], -avg_position[0], abs(avg_position[2])]
+
         # avg_position -> world coordinate
-        self.kalman_filter.update(self.avg_position)
-        #self.avg_position = self.kalman_filter.state[:3]
-        self.transform_to_local_frame()
+        # self.kalman_filter.update(self.avg_position)
+        # self.avg_position = self.kalman_filter.state[:3]
+        # self.publish_uwb(Point(*self.avg_position), self.orientation)
+        
+        #self.transform_to_local_frame()
+    
 
     def callback_uwb(self, data: UwbRange):
         uwb_data = [data.distance, data.responder_location.x, data.responder_location.y, data.responder_location.z, data.rspd_antenna_offset.x, data.rspd_antenna_offset.y, data.rspd_antenna_offset.z]
@@ -115,37 +118,38 @@ class UWBLocalization:
         self.leica_marker_pub.publish(marker)
         self.leica_cnt += 1
 
-    
-    def transform_to_local_frame(self):
-        current_pos = np.array(self.avg_position)
+
+    def transform_to_local_frame(self, current_pos):
         translation = current_pos - self.initial_pos
         quat_list = [self.orientation.x, self.orientation.y,self.orientation.z, self.orientation.w]
         rotation = R.from_quat(quat_list)
         rotation_matrix = rotation.as_matrix()
 
-        centered_translation = translation - translation 
+        centered_translation = translation - translation
         rotated_centered_translation = np.dot(rotation_matrix.T, centered_translation)
-        rotated_pos = rotated_centered_translation + translation        
+        rotated_pos = rotated_centered_translation + translation
         inv_rotation_matrix = rotation_matrix.T
         local_quat = R.from_matrix(inv_rotation_matrix).as_quat()
 
-        odom = Odometry()
-        
         _pos = Point(*rotated_pos)
         _ori = Quaternion(*local_quat)
 
-        odom.pose.pose.position = _pos
-        odom.pose.pose.orientation = _ori
+        self.publish_uwb(_pos, _ori)
+
+    def publish_uwb(self, position, orientation):
+        odom = Odometry()
+        odom.pose.pose.position = position
+        odom.pose.pose.orientation = orientation
 
         transform = TransformStamped()
         transform.header.stamp = self.stamp
         transform.header.frame_id = 'world'
         transform.child_frame_id = 'local'
-        transform.transform.translation = _pos
-        transform.transform.rotation = _ori
+        transform.transform.translation = position
+        transform.transform.rotation = orientation
         self.tf_broadcaster.sendTransform(transform)
 
-        marker = self.getMarker_ego('uwb_marker', self.uwb_cnt, _pos, _ori)
+        marker = self.getMarker_ego('uwb_marker', self.uwb_cnt, position, orientation)
         self.uwb_marker_pub.publish(marker)
         self.uwb_odom_pub.publish(odom)
         self.uwb_cnt += 1
@@ -158,7 +162,7 @@ class UWBLocalization:
                 if value is None:
                     return True
         return False
-    
+
     def trilaterate(self, uwb):
         uwb1 = uwb['1']
         uwb2 = uwb['2']
@@ -170,34 +174,34 @@ class UWBLocalization:
         P1 = np.array(p1)
         P2 = np.array(p2)
         P3 = np.array(p3)
-        
+
         ex = (P2 - P1) / np.linalg.norm(P2 - P1)
         i = np.dot(ex, P3 - P1)
         ey = (P3 - P1 - i * ex) / np.linalg.norm(P3 - P1 - i * ex)
         ez = np.cross(ex, ey)
         d = np.linalg.norm(P2 - P1)
         j = np.dot(ey, P3 - P1)
-        
+
         x = (r1**2 - r2**2 + d**2) / (2 * d)
         y = (r1**2 - r3**2 + i**2 + j**2) / (2 * j) - (i/j) * x
         z_square = r1**2 - x**2 - y**2
         if z_square < 0:
             return [0, 0, 0]
         z = np.sqrt(z_square)
-        
+
         estimated_position = P1 + x * ex + y * ey + z * ez
         return estimated_position
 
     def calculate_average_position(self, positions):
         positions_array = np.array(positions)
         if len(positions_array) == 0 or np.all(positions_array == 0):
-            return self.avg_position
+            return None
 
-        # 0이 아닌 값들만 추출하여 평균 계산
+        # # 0이 아닌 값들만 추출하여 평균 계산
         non_zero_positions = positions_array[positions_array != 0].reshape(-1, 3)
         if len(non_zero_positions) == 0:
-            return self.avg_postiion
-        average_position = np.mean(non_zero_positions, axis=0)
+            return None
+        average_position = np.median(non_zero_positions, axis=0)
         return average_position
 
     def normalize_quaternion(self, quat):
@@ -228,7 +232,7 @@ class UWBLocalization:
         marker.pose.position = pos
         marker.pose.orientation = ori
         return marker
-    
+
     def getMarker_ego(self, _ns, _id, pos, ori):
         marker = Marker()
         marker.type = Marker.SPHERE
@@ -267,7 +271,7 @@ class UWBLocalization:
         marker.color = ColorRGBA(1,1,0,1)
         marker.points = new_node_pts
         self.large_node_marker_pub.publish(marker)
-    
+
     def points1_cb(self, msg):
         modified_points = []
         for point in pc2.read_points(msg, field_names=None, skip_nans=True):
@@ -295,7 +299,7 @@ class UWBLocalization:
         header = msg.header
         header.frame_id = 'local'
         new_msg = pc2.create_cloud(header, msg.fields, modified_points)
-        #self.transform_points2_pub.publish(new_msg)
+        self.transform_points2_pub.publish(new_msg)
 
     def execute(self):
         rate = rospy.Rate(20)

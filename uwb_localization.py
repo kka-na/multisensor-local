@@ -94,7 +94,9 @@ class UWBLocalization:
         avg_position = self.calculate_average_position(positions)
         if avg_position is not None:
             self.avg_position = [-avg_position[1], -avg_position[0], abs(avg_position[2])]
-
+        else:
+            #TODO
+            self.avg_position = [self.avg_position[0]+0.5, self.avg_position[1]+0.5, self.avg_position[2]+0.5]
         # avg_position -> world coordinate
         # self.kalman_filter.update(self.avg_position)
         # self.avg_position = self.kalman_filter.state[:3]

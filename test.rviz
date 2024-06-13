@@ -94,7 +94,7 @@ Visualization Manager:
       Marker Topic: /uwb_marker
       Name: Marker
       Namespaces:
-        {}
+        uwb_marker: true
       Queue Size: 100
       Value: true
     - Alpha: 0.5
@@ -164,6 +164,14 @@ Visualization Manager:
       Transport Hint: raw
       Unreliable: false
       Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /ciorrected_uwb_marker
+      Name: Marker
+      Namespaces:
+        corrected_uwb_marker: true
+      Queue Size: 100
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -192,7 +200,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/ThirdPersonFollower
-      Distance: 35.347896575927734
+      Distance: 55.68629837036133
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -208,9 +216,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.5647973418235779
+      Pitch: 1.1297967433929443
       Target Frame: local
-      Yaw: 0.7585281133651733
+      Yaw: 5.5435614585876465
     Saved: ~
 Window Geometry:
   Displays:

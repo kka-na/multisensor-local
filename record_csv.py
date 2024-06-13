@@ -3,17 +3,13 @@
 import rospy
 from nav_msgs.msg import Odometry
 import csv
-import time
 
-# CSV 파일을 열고 기록할 준비를 합니다.
 #csv_file_1 = open('./csv/nya01_fast_livo.csv', 'w', newline='')  # 첫 번째 토픽의 데이터 파일
 csv_file_2 = open('./csv/eee01_uwb.csv', 'w', newline='')  # 두 번째 토픽의 데이터 파일
 
-# CSV 작성자를 생성합니다.
 #csv_writer_1 = csv.writer(csv_file_1)
 csv_writer_2 = csv.writer(csv_file_2)
 
-# CSV 파일에 헤더를 작성합니다.
 header = [
     'time', 'field.header.seq', 'field.header.stamp', 
     'field.pose.pose.position.x', 'field.pose.pose.position.y', 'field.pose.pose.position.z',
@@ -38,7 +34,6 @@ def callback_odom1(msg):
     csv_writer_1.writerow(row)
 
 def callback_odom2(msg):
-    # 두 번째 토픽에서 수신한 데이터를 CSV 파일에 기록합니다.
     row = [
         msg.header.stamp.to_sec(), 
         msg.header.seq,

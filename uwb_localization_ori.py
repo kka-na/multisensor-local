@@ -7,7 +7,7 @@ import sensor_msgs.point_cloud2 as pc2
 from std_msgs.msg import ColorRGBA
 from uwb_driver.msg import UwbRange
 from geometry_msgs.msg import Quaternion, TransformStamped, Point, PoseStamped, Vector3
-from nav_msgs.msg import Odometry, Path
+from nav_msgs.msg import Odometry
 from visualization_msgs.msg import Marker
 import math
 import tf2_ros
@@ -38,7 +38,6 @@ class UWBLocalization:
         self.initializing = True
         self.init_duration = rospy.Duration(5)  # 안정화 시간 5초
         self.init_start_time = rospy.Time.now()
-        self.path = Path()
 
         process_noise = np.eye(6) * 0.01  # 과정 노이즈 공분산 행렬
         measurement_noise = np.eye(3) * 0.5  # 측정 노이즈 공분산 행렬
@@ -46,8 +45,7 @@ class UWBLocalization:
 
         rospy.Subscriber("/uwb_endorange_info", UwbRange, self.callback_uwb)
         rospy.Subscriber("/leica/pose/relative", PoseStamped, self.leica_cb)
-        #self.uwb_marker_pub = rospy.Publisher("/uwb_marker", Marker, queue_size=1)
-        self.uwb_path_pub = rospy.Publisher("/uwb_path", Path, queue_size=1)
+        self.uwb_marker_pub = rospy.Publisher("/uwb_marker", Marker, queue_size=1)
         rospy.Subscriber('/imu/imu', Imu, self.imu_cb)
         rospy.Subscriber('/os1_cloud_node1/points', PointCloud2, self.points1_cb)
         rospy.Subscriber('/os1_cloud_node2/points', PointCloud2, self.points2_cb)
@@ -98,7 +96,7 @@ class UWBLocalization:
             self.avg_position = [-avg_position[1], -avg_position[0], abs(avg_position[2])]
         else:
             #TODO
-            self.avg_position = [0,0,0]
+            self.avg_position = [self.avg_position[0]+0.5, self.avg_position[1]+0.5, self.avg_position[2]+0.5]
         # avg_position -> world coordinate
         # self.kalman_filter.update(self.avg_position)
         # self.avg_position = self.kalman_filter.state[:3]
@@ -142,7 +140,6 @@ class UWBLocalization:
 
     def publish_uwb(self, position, orientation):
         odom = Odometry()
-        odom.header.stamp = self.stamp
         odom.pose.pose.position = position
         odom.pose.pose.orientation = orientation
 
@@ -154,19 +151,8 @@ class UWBLocalization:
         transform.transform.rotation = orientation
         self.tf_broadcaster.sendTransform(transform)
 
-        #marker = self.getMarker_ego('uwb_marker', self.uwb_cnt, position, orientation)
-
-        pose = PoseStamped()
-        pose.header.frame_id = "world"
-        pose.header.stamp = self.stamp
-        pose.pose.position = position
-        pose.pose.orientation = orientation
-        self.path.header.frame_id = "world"
-        self.path.header.stamp = self.stamp
-        self.path.poses.append(pose)
-        self.uwb_path_pub.publish(self.path)
-
-        #self.uwb_marker_pub.publish(marker)
+        marker = self.getMarker_ego('uwb_marker', self.uwb_cnt, position, orientation)
+        self.uwb_marker_pub.publish(marker)
         self.uwb_odom_pub.publish(odom)
         self.uwb_cnt += 1
 

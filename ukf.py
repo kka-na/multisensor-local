@@ -33,7 +33,7 @@ class UnscentedKalmanFilter:
         self.ukf.R = measurement_noise
 
         # 위치 변화의 최대 허용 범위
-        self.max_position_change = 3
+        self.max_position_change = 5
     
     def state_transition_function(self, x, dt):
         """ 상태 전이 함수: IMU 데이터를 이용해 상태를 예측 """
@@ -61,21 +61,20 @@ class UnscentedKalmanFilter:
         # GPS 데이터를 사용하여 상태 갱신
         self.ukf.update(gps_data)
         
-        # 예측된 새로운 위치
-        new_position = self.ukf.x[:3]
+        # # 예측된 새로운 위치
+        # new_position = self.ukf.x[:3]
         
-        # 이전 위치와 새로운 위치의 차이 계산
-        position_change = np.linalg.norm(new_position - previous_position)
-        
-        
-        # # IMU 데이터를 이용해 방향 벡터 계산
+        # # 이전 위치와 새로운 위치의 차이 계산
+        # position_change = np.linalg.norm(new_position - previous_position)
+        # print(position_change)
+        #   # IMU 데이터를 이용해 방향 벡터 계산
         # imu_direction = imu_accel / np.linalg.norm(imu_accel) if np.linalg.norm(imu_accel) != 0 else np.zeros(3)
         
         # # 위치 변화가 허용 범위를 초과하는지 확인
-        # if 8 > position_change > self.max_position_change:
+        # if position_change > self.max_position_change:
         #     print(f"경고: 위치 변화 {position_change}가 허용 범위 {self.max_position_change}를 초과합니다.")
         #     # 방향 벡터를 사용하여 새로운 위치를 임계값 내로 제한
-        #     self.ukf.x[:3] = previous_position + imu_direction * self.max_position_change
+        #     self.ukf.x[:3] = previous_position + imu_direction
     
     def get_state(self):
         """ 현재 상태 반환 """

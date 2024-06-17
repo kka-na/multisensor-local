@@ -5,8 +5,8 @@ from nav_msgs.msg import Odometry
 import csv
 import time 
 
-csv_file_1 = open('./csv/nya01_uwb.csv', 'w', newline='')
-csv_file_2 = open('./csv/nya01_uwb_lio.csv', 'w', newline='')
+csv_file_1 = open('./csv/sbs01_uwb.csv', 'w', newline='')
+csv_file_2 = open('./csv/sbs01_uwb_lio.csv', 'w', newline='')
 
 csv_writer_1 = csv.writer(csv_file_1)
 csv_writer_2 = csv.writer(csv_file_2)

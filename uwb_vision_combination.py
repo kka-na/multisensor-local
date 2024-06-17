@@ -10,7 +10,7 @@ class UWBVisionCombination:
     def __init__(self):
         rospy.init_node('uwb_vision_combination', anonymous=True)
         
-        self.threshold = 0.5
+        self.threshold = 0.3
         
         self.prev_uwb_pos = None
         self.prev_update_uwb_pos = None
@@ -19,6 +19,7 @@ class UWBVisionCombination:
         self.curr_stamp = rospy.Time.now()
         self.prev_vision_pos = None
         self.path = Path()
+        self.cnt = 0
         
         rospy.Subscriber('/uwb_odom', Odometry, self.uwb_cb)
         rospy.Subscriber('/Odometry', Odometry, self.vision_cb)
@@ -30,10 +31,13 @@ class UWBVisionCombination:
         current_uwb_pos = np.array([data.pose.pose.position.x, data.pose.pose.position.y, data.pose.pose.position.z])
         self.curr_uwb_orient = data.pose.pose.orientation
         self.curr_stamp = data.header.stamp
+        self.cnt += 1 
+        
         if self.prev_uwb_pos is None:
             self.prev_uwb_pos = current_uwb_pos
             return
-        
+        if self.cnt < 5 :
+            return    
         uwb_change = current_uwb_pos - self.prev_uwb_pos
         
         self.correct_position(current_uwb_pos, uwb_change)
@@ -41,7 +45,7 @@ class UWBVisionCombination:
         
 
     def vision_cb(self, data):
-        current_vision_pos = np.array([-data.pose.pose.position.y, -data.pose.pose.position.x, data.pose.pose.position.z])
+        current_vision_pos = np.array([data.pose.pose.position.y, -data.pose.pose.position.x, data.pose.pose.position.z])
         
         if self.prev_vision_pos is None:
             self.prev_vision_pos = current_vision_pos
